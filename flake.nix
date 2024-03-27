@@ -2,6 +2,7 @@
   description = "A Nix Flake for an xfce-based system with YubiKey setup";
 
   inputs = {
+    hm.url = "github:nix-community/home-manager/release-23.11";
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
     drduhConfig.url = "github:drduh/config";
     drduhConfig.flake = false;
@@ -10,12 +11,14 @@
   outputs = {
     self,
     nixpkgs,
+    hm,
     drduhConfig,
   }: let
     mkSystem = system:
       nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
+          "${hm}/nixos"
           "${nixpkgs}/nixos/modules/profiles/all-hardware.nix"
           "${nixpkgs}/nixos/modules/installer/cd-dvd/iso-image.nix"
           (
@@ -29,6 +32,36 @@
                 sed '/pinentry-program/d' ${drduhConfig}/gpg-agent.conf > $out
                 echo "pinentry-program ${pkgs.pinentry.curses}/bin/pinentry" >> $out
               '';
+
+              shortcutHtml = pkgs.makeDesktopItem {
+                name = "yubikey-guide-html";
+                icon = "${pkgs.yubikey-manager-qt}/share/ykman-gui/icons/ykman.png";
+                desktopName = "drduh's YubiKey Guide (html)";
+                genericName = "Guide to using YubiKey for GPG and SSH (html)";
+                comment = "Open the guide in a browser";
+                categories = ["Documentation"];
+                exec = "${viewYubikeyGuideHtml}/bin/view-yubikey-guide-html";
+              };
+              yubikeyGuideHtml = pkgs.symlinkJoin {
+                name = "yubikey-guide-html";
+                paths = [viewYubikeyGuideHtml shortcutHtml];
+              };
+
+              viewYubikeyGuideHtml = let
+                guide = pkgs.stdenv.mkDerivation {
+                  name = "yubikey-guide.html";
+                  src = self;
+                  buildInputs = [pkgs.pandoc];
+                  installPhase = ''
+                    pandoc --highlight-style pygments -s --toc README.md | \
+                    sed -e 's/<keyid>/\&lt;keyid\&gt;/g' > $out
+                  '';
+                };
+              in
+                pkgs.writeShellScriptBin "view-yubikey-guide-html" ''
+                  exec $(exo-open --launch WebBrowser ${guide} || true)
+                '';
+
               viewYubikeyGuide = pkgs.writeShellScriptBin "view-yubikey-guide" ''
                 viewer="$(type -P xdg-open || true)"
                 if [ -z "$viewer" ]; then
@@ -107,6 +140,39 @@
                 root.initialHashedPassword = "";
               };
 
+              home-manager.users.nixos = {pkgs, ...}: {
+                xdg.mimeApps.defaultApplications = {
+                  "x-scheme-handler/http" = ["xfce4-web-browser.desktop"];
+                  "x-scheme-handler/https" = ["xfce4-web-browser.desktop"];
+                };
+
+                xdg.mimeApps.associations.added = {
+                  "x-scheme-handler/http" = ["xfce4-web-browser.desktop"];
+                  "x-scheme-handler/https" = ["xfce4-web-browser.desktop"];
+                };
+
+                xdg.configFile."xfce4/helpers.rc".text = ''
+                  WebBrowser=custom-WebBrowser
+                '';
+
+                xdg.dataFile."xfce4/helpers/custom-WebBrowser.desktop".text = ''
+[Desktop Entry]
+NoDisplay=true
+Version=1.0
+Encoding=UTF-8
+Type=X-XFCE-Helper
+X-XFCE-Category=WebBrowser
+X-XFCE-CommandsWithParameter=netsurf-gtk3 "%s"
+Icon=netsurf-gtk3
+Name=netsurf-gtk3
+X-XFCE-Commands=netsurf-gtk3
+                '';
+
+                # The state version is required and should stay at the version yubioath-flutter
+                # originally installed.
+                home.stateVersion = "23.11";
+              };
+
               security = {
                 pam.services.lightdm.text = ''
                   auth sufficient pam_succeed_if.so user ingroup wheel
@@ -116,6 +182,12 @@
                   wheelNeedsPassword = false;
                 };
               };
+
+              environment.etc."mimedebug".source = pkgs.writeShellScriptBin "query-mime" ''
+                XDG_UTILS_DEBUG_LEVEL=2 xdg-mime query default text/html
+                ls /run/current-system/sw/share/applications
+                mimeo --help
+              '';
 
               environment.systemPackages = with pkgs; [
                 # Tools for backing up keys
@@ -149,6 +221,11 @@
                 # This guide itself (run `view-yubikey-guide` on the terminal
                 # to open it in a non-graphical environment).
                 yubikeyGuide
+                yubikeyGuideHtml
+
+                # html files
+                mimeo
+                netsurf.browser
               ];
 
               # Disable networking so the system is air-gapped
@@ -195,7 +272,13 @@
                 cp -R ${self}/contrib/* ${homeDir}
                 ln -sf ${yubikeyGuide}/share/applications/yubikey-guide.desktop ${desktopDir}
                 ln -sfT ${self} ${documentsDir}/YubiKey-Guide
+                ln -sf ${yubikeyGuideHtml}/share/applications/yubikey-guide-html.desktop ${desktopDir}
               '';
+              system.activationScripts.base-dirs = {
+                text = ''
+                  mkdir -p /nix/var/nix/profiles/per-user/nixos
+                '';
+              };
               system.stateVersion = "23.11";
             }
           )

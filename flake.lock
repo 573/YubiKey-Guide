@@ -3,11 +3,11 @@
     "drduhConfig": {
       "flake": false,
       "locked": {
-        "lastModified": 1697417581,
-        "narHash": "sha256-R45L/Xv3z0lJhGt781wDbjaq1qc+sGTmsUt+XHwgf4A=",
+        "lastModified": 1710110429,
+        "narHash": "sha256-sW7crQEhoGslXyO9djBuPYf1DFqTo5uYUEFkaSCw1xc=",
         "owner": "drduh",
         "repo": "config",
-        "rev": "8c21617100795fea2313656abdf25f93b98fdc30",
+        "rev": "702281406b1f491b805d8e380dc03d73ace517f3",
         "type": "github"
       },
       "original": {
@@ -16,13 +16,48 @@
         "type": "github"
       }
     },
+    "hm": {
+      "inputs": {
+        "nixpkgs": "nixpkgs"
+      },
+      "locked": {
+        "lastModified": 1706981411,
+        "narHash": "sha256-cLbLPTL1CDmETVh4p0nQtvoF+FSEjsnJTFpTxhXywhQ=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "652fda4ca6dafeb090943422c34ae9145787af37",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "ref": "release-23.11",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1706826059,
-        "narHash": "sha256-N69Oab+cbt3flLvYv8fYnEHlBsWwdKciNZHUbynVEOA=",
+        "lastModified": 1705331948,
+        "narHash": "sha256-qjQXfvrAT1/RKDFAMdl8Hw3m4tLVvMCc8fMqzJv0pP4=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "25e3d4c0d3591c99929b1ec07883177f6ea70c9d",
+        "rev": "b8dd8be3c790215716e7c12b247f45ca525867e2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-23.11",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1710162809,
+        "narHash": "sha256-i2R2bcnQp+85de67yjgZVvJhd6rRnJbSYNpGmB6Leb8=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ddcd7598b2184008c97e6c9c6a21c5f37590b8d2",
         "type": "github"
       },
       "original": {
@@ -35,7 +70,8 @@
     "root": {
       "inputs": {
         "drduhConfig": "drduhConfig",
-        "nixpkgs": "nixpkgs"
+        "hm": "hm",
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },
