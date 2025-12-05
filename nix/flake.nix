@@ -3,16 +3,19 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
+    hm.url = "github:nix-community/home-manager/release-25.05";
   };
 
   outputs = {
     self,
     nixpkgs,
+    hm,
   }: let
     mkSystem = system:
       nixpkgs.lib.nixosSystem {
         inherit system;
         modules = [
+          "${hm}/nixos"
           "${nixpkgs}/nixos/modules/profiles/all-hardware.nix"
           "${nixpkgs}/nixos/modules/installer/cd-dvd/iso-image.nix"
           (
@@ -26,8 +29,38 @@
                 sed '/pinentry-program/d' ${self}/../config/gpg-agent.conf > $out
                 echo "pinentry-program ${pkgs.pinentry.curses}/bin/pinentry" >> $out
               '';
-              dicewareAddress = "localhost";
-              dicewarePort = 8080;
+
+              /* should not be needed anymore
+              shortcutHtml = pkgs.makeDesktopItem {
+                name = "yubikey-guide-html";
+                icon = "${pkgs.yubikey-manager-qt}/share/ykman-gui/icons/ykman.png";
+                desktopName = "drduh's YubiKey Guide (html)";
+                genericName = "Guide to using YubiKey for GPG and SSH (html)";
+                comment = "Open the guide in a browser";
+                categories = ["Documentation"];
+                exec = "${viewYubikeyGuideHtml}/bin/view-yubikey-guide-html";
+              };
+              yubikeyGuideHtml = pkgs.symlinkJoin {
+                name = "yubikey-guide-html";
+                paths = [viewYubikeyGuideHtml shortcutHtml];
+              };
+
+              viewYubikeyGuideHtml = let
+                guide = pkgs.stdenv.mkDerivation {
+                  name = "yubikey-guide.html";
+                  src = self;
+                  buildInputs = [pkgs.pandoc];
+                  installPhase = ''
+                    pandoc --highlight-style pygments -s --toc README.md | \
+                    sed -e 's/<keyid>/\&lt;keyid\&gt;/g' > $out
+                  '';
+                };
+              in
+                pkgs.writeShellScriptBin "view-yubikey-guide-html" ''
+                  exec $(exo-open --launch WebBrowser ${guide} || true)
+                '';
+	      */
+
               viewYubikeyGuide = pkgs.writeShellScriptBin "view-yubikey-guide" ''
                 viewer="$(type -P xdg-open || true)"
                 if [ -z "$viewer" ]; then
@@ -47,38 +80,6 @@
               yubikeyGuide = pkgs.symlinkJoin {
                 name = "yubikey-guide";
                 paths = [viewYubikeyGuide shortcut];
-              };
-              dicewareScript = pkgs.writeShellScriptBin "diceware-webapp" ''
-                viewer="$(type -P xdg-open || true)"
-                if [ -z "$viewer" ]; then
-                  viewer="firefox"
-                fi
-                exec $viewer "http://"${lib.escapeShellArg dicewareAddress}":${toString dicewarePort}/index.html"
-              '';
-              dicewarePage = pkgs.stdenv.mkDerivation {
-                name = "diceware-page";
-                src = pkgs.fetchFromGitHub {
-                  owner = "grempe";
-                  repo = "diceware";
-                  rev = "9ef886a2a9699f73ae414e35755fd2edd69983c8";
-                  sha256 = "44rpK8svPoKx/e/5aj0DpEfDbKuNjroKT4XUBpiOw2g=";
-                };
-                patches = [
-                  # Include changes published on https://secure.research.vt.edu/diceware/
-                  ./diceware-vt.patch
-                ];
-                buildPhase = ''
-                  cp -a . $out
-                '';
-              };
-              dicewareWebApp = pkgs.makeDesktopItem {
-                name = "diceware";
-                icon = "${dicewarePage}/favicon.ico";
-                desktopName = "Diceware Passphrase Generator";
-                genericName = "Passphrase Generator";
-                comment = "Open the passphrase generator in a web browser";
-                categories = ["Utility"];
-                exec = "${dicewareScript}/bin/${dicewareScript.name}";
               };
             in {
               isoImage = {
@@ -102,6 +103,10 @@
               };
 
               services = {
+	        udisks2 = {
+		  enable = true;
+		  mountOnMedia = true;
+		};
                 pcscd.enable = true;
                 udev.packages = [pkgs.yubikey-personalization];
                 # Automatically log in at the virtual consoles.
@@ -123,34 +128,9 @@
                     user = "nixos";
                   };
                 };
-                # Host the `https://secure.research.vt.edu/diceware/` website offline
-                nginx = {
-                  enable = true;
-                  virtualHosts."diceware.local" = {
-                    listen = [
-                      {
-                        addr = dicewareAddress;
-                        port = dicewarePort;
-                      }
-                    ];
-                    root = "${dicewarePage}";
-                  };
-                };
               };
 
               programs = {
-                # Add firefox for running the diceware web app
-                firefox = {
-                  enable = true;
-                  preferences = {
-                    # Disable data reporting confirmation dialogue
-                    "datareporting.policy.dataSubmissionEnabled" = false;
-                    # Disable welcome tab
-                    "browser.aboutwelcome.enabled" = false;
-                  };
-                  # Make preferences appear as user-defined values
-                  preferencesStatus = "user";
-                };
                 ssh.startAgent = false;
                 gnupg = {
                   dirmngr.enable = true;
@@ -171,6 +151,39 @@
                 root.initialHashedPassword = "";
               };
 
+              home-manager.users.nixos = {pkgs, ...}: {
+                xdg.mimeApps.defaultApplications = {
+                  "x-scheme-handler/http" = ["xfce4-web-browser.desktop"];
+                  "x-scheme-handler/https" = ["xfce4-web-browser.desktop"];
+                };
+
+                xdg.mimeApps.associations.added = {
+                  "x-scheme-handler/http" = ["xfce4-web-browser.desktop"];
+                  "x-scheme-handler/https" = ["xfce4-web-browser.desktop"];
+                };
+
+                xdg.configFile."xfce4/helpers.rc".text = ''
+                  WebBrowser=custom-WebBrowser
+                '';
+
+                xdg.dataFile."xfce4/helpers/custom-WebBrowser.desktop".text = ''
+[Desktop Entry]
+NoDisplay=true
+Version=1.0
+Encoding=UTF-8
+Type=X-XFCE-Helper
+X-XFCE-Category=WebBrowser
+X-XFCE-CommandsWithParameter=netsurf-gtk3 "%s"
+Icon=netsurf-gtk3
+Name=netsurf-gtk3
+X-XFCE-Commands=netsurf-gtk3
+                '';
+
+                # The state version is required and should stay at the version yubioath-flutter
+                # originally installed.
+                home.stateVersion = "25.05";
+              };
+
               security = {
                 pam.services.lightdm.text = ''
                   auth sufficient pam_succeed_if.so user ingroup wheel
@@ -180,6 +193,12 @@
                   wheelNeedsPassword = false;
                 };
               };
+
+              environment.etc."mimedebug".source = pkgs.writeShellScriptBin "query-mime" ''
+                XDG_UTILS_DEBUG_LEVEL=2 xdg-mime query default text/html
+                ls /run/current-system/sw/share/applications
+                mimeo --help
+              '';
 
               environment.systemPackages = with pkgs; [
                 # Tools for backing up keys
@@ -197,38 +216,47 @@
 
                 # Testing
                 ent
+                #haskellPackages.hopenpgp-tools
 
                 # Password generation tools
                 diceware
-                dicewareWebApp
                 pwgen
-                rng-tools
 
                 # Might be useful beyond the scope of the guide
                 cfssl
                 pcsctools
                 tmux
                 htop
+		age-plugin-yubikey
 
                 # This guide itself (run `view-yubikey-guide` on the terminal
                 # to open it in a non-graphical environment).
                 yubikeyGuide
+                #yubikeyGuideHtml
 
                 # PDF and Markdown viewer
                 kdePackages.okular
+
+                # html files
+                mimeo
+                netsurf.browser
+		keepassxc
+		keepass-qrcodeview
+	#	ungoogled-chromium
+	#	firefox-bin
               ];
 
               # Disable networking so the system is air-gapped
               # Comment all of these lines out if you'll need internet access
-              boot.initrd.network.enable = false;
+#              boot.initrd.network.enable = false;
               networking = {
-                resolvconf.enable = false;
-                dhcpcd.enable = false;
-                dhcpcd.allowInterfaces = [];
-                interfaces = {};
+#                resolvconf.enable = false;
+#                dhcpcd.enable = false;
+                dhcpcd.allowInterfaces = [ "enp0s25" ];
+#                interfaces = {};
                 firewall.enable = true;
-                useDHCP = false;
-                useNetworkd = false;
+#                useDHCP = false;
+#                useNetworkd = false;
                 wireless.enable = false;
                 networkmanager.enable = lib.mkForce false;
               };
@@ -261,10 +289,15 @@
 
                 cp -R ${self}/contrib/* ${homeDir}
                 ln -sf ${yubikeyGuide}/share/applications/yubikey-guide.desktop ${desktopDir}
-                ln -sf ${dicewareWebApp}/share/applications/${dicewareWebApp.name} ${desktopDir}
                 ln -sfT ${self} ${documentsDir}/YubiKey-Guide
+                #ln -sf $ { yubikeyGuideHtml }/share/applications/yubikey-guide-html.desktop ${desktopDir}
               '';
               system.stateVersion = "25.05";
+              #system.activationScripts.base-dirs = {
+              #  text = ''
+              #    mkdir -p /nix/var/nix/profiles/per-user/nixos
+              #  '';
+              #};
             }
           )
         ];
